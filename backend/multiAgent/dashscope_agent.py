@@ -46,7 +46,7 @@ class DashScopeAgent(AIAgent):
         if not resolved_key:
             raise ValueError(
                 f"[{agent_name}] 未提供 API Key，"
-                "请设置环境变量 DASHSCOPE_API_KEY，或在项目根目录 API_Key.json 中配置 dashscope_api_key，"
+                "请设置环境变量 DASHSCOPE_API_KEY，或在 Web 端登录后进入系统设置配置 DashScope Key，"
                 "或在构造函数中传入 api_key 参数。"
             )
 

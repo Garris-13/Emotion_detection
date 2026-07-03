@@ -4,13 +4,74 @@ __pycache__/
 *.pyo
 *.pyd
 
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+API_key.json
+API_Key.json
+*_api_key*.json
+
 # Local runtime outputs
+data/
+!data/.gitkeep
 data/comprehensive_results/
 data/monitor_results/
+data/user_settings.json
+backend/data/
+backend/api/data/
+
+# Model weights and checkpoints
+*.pth
+*.pt
+*.ckpt
+*.onnx
+*.h5
+
+# Experiment / thesis / generated documents
+baseline_compare_*.json
+feedback_*_results.json
+supplementary_experiment_results.json
+experimentlog.md
+backend/feedback_*_evaluation.py
+backend/reeval_baseline_checkpoint.py
+backend/run_baseline_training.ps1
+backend/supplementary_experiments.py
+backend/train_baseline_compare.py
+backend/update_thesis_baseline_table.py
+paper/
+soft_copyright/
+thesis.tex
+ccfthesis*.sty
+*.docx
+final*.docx
+final_*.txt
+final_*.json
+report-readable.*
+thesis_figures/
+.latexmkrc
+extract_docx_images.py
+extract_final_docx.py
+find_orphan_images.py
+generate_thesis_from_final.py
+创新训练项目结题报告书*.md
+*.aux
+*.bbl
+*.bcf
+*.blg
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.run.xml
+*.synctex.gz
+
 # IDE
 .vscode/
+.idea/
 .venv/
 
-backend/data
-
-.env
+# Python packaging/build outputs
+build/
+dist/
+*.egg-info/

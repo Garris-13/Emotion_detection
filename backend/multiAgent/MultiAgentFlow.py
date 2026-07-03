@@ -27,8 +27,18 @@ MODEL = "deepseek-chat"
 #  Agent 工厂函数
 # ------------------------------------------------------------------ #
 
-def make_agent(name: str, system_prompt: str, temperature: float = 0.7, max_tokens: int = 2000):
-    deepseek_key = get_api_key("deepseek")
+def make_agent(
+    name: str,
+    system_prompt: str,
+    temperature: float = 0.7,
+    max_tokens: int = 2000,
+    deepseek_key: Optional[str] = None,
+    dashscope_key: Optional[str] = None,
+):
+    explicit_keys_provided = deepseek_key is not None or dashscope_key is not None
+
+    if not explicit_keys_provided:
+        deepseek_key = get_api_key("deepseek")
     if deepseek_key:
         return DeepSeekAgent(
             agent_name=name,
@@ -40,7 +50,8 @@ def make_agent(name: str, system_prompt: str, temperature: float = 0.7, max_toke
         )
 
     # 兼容回退到百炼。
-    dashscope_key = get_api_key("dashscope")
+    if not explicit_keys_provided:
+        dashscope_key = get_api_key("dashscope")
     if dashscope_key:
         return DashScopeAgent(
             agent_name=name,
@@ -53,7 +64,7 @@ def make_agent(name: str, system_prompt: str, temperature: float = 0.7, max_toke
 
     raise ValueError(
         f"[{name}] 未提供 API Key，请设置环境变量 DEEPSEEK_API_KEY / DASHSCOPE_API_KEY，"
-        f"或在项目根目录 API_Key.json 中配置 deepseek_api_key / dashscope_api_key。"
+        f"或在 Web 端登录后进入系统设置配置 DeepSeek / DashScope Key。"
     )
 
 
@@ -158,7 +169,13 @@ def format_user_context(user_context: dict) -> str:
 #  主流程
 # ------------------------------------------------------------------ #
 
-def run_flow(input_path: str, user_context: Optional[dict] = None, output_path: Optional[str] = None) -> str:
+def run_flow(
+    input_path: str,
+    user_context: Optional[dict] = None,
+    output_path: Optional[str] = None,
+    deepseek_key: Optional[str] = None,
+    dashscope_key: Optional[str] = None,
+) -> str:
     """
     执行多智能体编排流程。
 
@@ -177,10 +194,22 @@ def run_flow(input_path: str, user_context: Optional[dict] = None, output_path: 
         raw_data = json.load(f)
 
     history_data = raw_data.get("history_data", raw_data)  # 兼容直接传列表或带 key 的结构
-    return run_flow_from_data(history_data=history_data, user_context=user_context, output_path=output_path)
+    return run_flow_from_data(
+        history_data=history_data,
+        user_context=user_context,
+        output_path=output_path,
+        deepseek_key=deepseek_key,
+        dashscope_key=dashscope_key,
+    )
 
 
-def run_flow_from_data(history_data: list, user_context: Optional[dict] = None, output_path: Optional[str] = None) -> str:
+def run_flow_from_data(
+    history_data: list,
+    user_context: Optional[dict] = None,
+    output_path: Optional[str] = None,
+    deepseek_key: Optional[str] = None,
+    dashscope_key: Optional[str] = None,
+) -> str:
     """
     直接使用历史数据执行多智能体流程。
 
@@ -207,6 +236,10 @@ def run_flow_from_data(history_data: list, user_context: Optional[dict] = None, 
 
     user_context_str = format_user_context(user_context)
     generated_at = datetime.now().strftime("%Y年%m月%d日 %H:%M:%S")
+    agent_key_kwargs = {
+        "deepseek_key": deepseek_key,
+        "dashscope_key": dashscope_key,
+    }
 
     print(f"✅ 加载完成：{total_samples} 条历史数据，用户画像：{user_context_str}")
 
@@ -221,7 +254,7 @@ def run_flow_from_data(history_data: list, user_context: Optional[dict] = None, 
     # ============================
     print("\n" + "=" * 60)
     print("🔍 Step 1 / 4 — 数据分析师正在分析数据...")
-    analyst_agent = make_agent("数据分析师", ANALYST_SYSTEM_PROMPT, temperature=0.3)
+    analyst_agent = make_agent("数据分析师", ANALYST_SYSTEM_PROMPT, temperature=0.3, **agent_key_kwargs)
     analyst_agent.create_conversation()
     analyst_output = analyst_agent.run(analyst_input)
     print("✅ 数据分析师完成。")
@@ -235,7 +268,7 @@ def run_flow_from_data(history_data: list, user_context: Optional[dict] = None, 
         f"## 数据分析结论\n\n{analyst_output}\n\n"
         f"---\n\n## 用户画像\n\n{user_context_str}"
     )
-    psychologist_agent = make_agent("心理评估师", PSYCHOLOGIST_SYSTEM_PROMPT, temperature=0.7, max_tokens=600)
+    psychologist_agent = make_agent("心理评估师", PSYCHOLOGIST_SYSTEM_PROMPT, temperature=0.7, max_tokens=600, **agent_key_kwargs)
     psychologist_agent.create_conversation()
     psychologist_output = psychologist_agent.run(psychologist_input)
     print("✅ 心理评估师完成。")
@@ -249,7 +282,7 @@ def run_flow_from_data(history_data: list, user_context: Optional[dict] = None, 
         f"## 心理评估结果\n\n{psychologist_output}\n\n"
         f"---\n\n## 用户画像\n\n{user_context_str}"
     )
-    planner_agent = make_agent("行动规划师", PLANNER_SYSTEM_PROMPT, temperature=0.5)
+    planner_agent = make_agent("行动规划师", PLANNER_SYSTEM_PROMPT, temperature=0.5, **agent_key_kwargs)
     planner_agent.create_conversation()
     planner_output = planner_agent.run(planner_input)
     print("✅ 行动规划师完成。")
@@ -271,7 +304,7 @@ def run_flow_from_data(history_data: list, user_context: Optional[dict] = None, 
         f"---\n\n"
         f"### 行动规划师输出\n\n{planner_output}"
     )
-    editor_agent = make_agent("报告主编", EDITOR_SYSTEM_PROMPT, temperature=0.5, max_tokens=3000)
+    editor_agent = make_agent("报告主编", EDITOR_SYSTEM_PROMPT, temperature=0.5, max_tokens=3000, **agent_key_kwargs)
     editor_agent.create_conversation()
     final_report = editor_agent.run(editor_input)
     print("✅ 报告主编完成。")

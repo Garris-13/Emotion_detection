@@ -46,7 +46,7 @@ class AgentState(TypedDict):
 
 class LangGraphEmotionAgent:
     def __init__(self, api_key: Optional[str] = None, base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"):
-        self.api_key = api_key or os.getenv("DASHSCOPE_API_KEY")
+        self.api_key = api_key
         self.base_url = base_url
         self.llm = None
         self.graph = None
@@ -58,7 +58,7 @@ class LangGraphEmotionAgent:
             self._init_db()
             self._build_graph()
         else:
-            print("⚠️ Agent 处于降级模式：LangGraph 或 API Key 不可用")
+            print("⚠️ Agent 处于降级模式：LangGraph 不可用或当前用户未配置 DashScope API Key")
 
     def _init_llm(self):
         """初始化 LLM"""

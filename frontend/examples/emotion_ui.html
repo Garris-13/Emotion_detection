@@ -17,6 +17,7 @@
             --bg: #f0f2f5;
             --surface: #ffffff;
             --surface-alt: #f7f8fa;
+            --bg-secondary: #f8fafc;
             --primary: #6366f1;
             --primary-light: #818cf8;
             --primary-dark: #4f46e5;
@@ -37,16 +38,34 @@
             --transition: .25s cubic-bezier(.4,0,.2,1);
             --sidebar-w: 260px;
             --header-h: 64px;
+            --app-brightness: 1;
+            --app-font-scale: 1;
+            --app-font-family: 'Inter', 'SF Pro Display', -apple-system, 'Microsoft YaHei', sans-serif;
+        }
+        body.theme-dark {
+            --bg: #111827;
+            --surface: #1f2937;
+            --surface-alt: #273449;
+            --bg-secondary: #172033;
+            --text: #e5e7eb;
+            --text-secondary: #cbd5e1;
+            --text-muted: #94a3b8;
+            --border: #374151;
+            --shadow-sm: 0 1px 3px rgba(0,0,0,.25);
+            --shadow: 0 4px 20px rgba(0,0,0,.3);
+            --shadow-lg: 0 10px 40px rgba(0,0,0,.45);
         }
         /* ============ Reset & Base ============ */
         *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
         body {
-            font-family: 'Inter', 'SF Pro Display', -apple-system, 'Microsoft YaHei', sans-serif;
+            font-family: var(--app-font-family);
+            font-size: calc(16px * var(--app-font-scale));
             background: var(--bg);
             color: var(--text);
             line-height: 1.6;
             min-height: 100vh;
             overflow-x: hidden;
+            filter: brightness(var(--app-brightness));
         }
         button { cursor:pointer; border:none; font-family:inherit; font-size:inherit; }
         input, select, textarea { font-family:inherit; font-size:inherit; }
@@ -295,6 +314,52 @@
             transition: var(--transition);
         }
         .btn-logout:hover { background: #fef2f2; color: var(--danger); }
+
+        .settings-section {
+            border: 1px solid var(--border);
+            background: var(--surface-alt);
+            border-radius: var(--radius-sm);
+            padding: 18px;
+            margin-bottom: 18px;
+        }
+        .settings-section h4 {
+            font-size: .98rem;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .settings-row {
+            display: grid;
+            grid-template-columns: 180px minmax(0, 1fr);
+            gap: 14px;
+            align-items: center;
+            padding: 10px 0;
+            border-top: 1px solid var(--border);
+        }
+        .settings-row:first-of-type { border-top: none; }
+        .settings-row .hint {
+            color: var(--text-muted);
+            font-size: .82rem;
+            margin-top: 4px;
+        }
+        .settings-inline {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .key-status {
+            font-size: .82rem;
+            color: var(--text-muted);
+            padding: 6px 10px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-xs);
+        }
+        @media(max-width:700px) {
+            .settings-row { grid-template-columns: 1fr; }
+        }
 
         /* Main Content */
         .main-content {
@@ -1160,8 +1225,11 @@
             background: #0f172a;
             border-radius: var(--radius-sm);
             border: 1px solid var(--border);
-            min-height: 280px;
             position: relative;
+            width: 100%;
+            max-width: min(100%, 560px);
+            margin: 0 auto;
+            aspect-ratio: 1 / 1;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -1169,7 +1237,7 @@
         }
         .monitor-preview-wrap #monitorPreviewImg {
             width: 100%;
-            max-height: min(70vh, 560px);
+            height: 100%;
             object-fit: contain;
             display: block;
         }
@@ -1387,7 +1455,7 @@
         <div class="welcome-card">
             <div class="logo">🧠</div>
             <h1>EmoCare</h1>
-            <p class="subtitle">智能情绪识别与健康管理系统</p>
+            <p class="subtitle">智能情绪识别与健康反馈系统</p>
             <input type="text" id="welcomeUsername" placeholder="用户名" autocomplete="username">
             <input type="password" id="welcomePassword" placeholder="密码" autocomplete="current-password">
             <div class="welcome-btns">
@@ -1478,6 +1546,10 @@
                 </div>
                 <div class="nav-item" data-tab="chatTab">
                     <i class="fas fa-comments"></i> AI 对话
+                </div>
+                <div class="nav-label" style="margin-top:12px;">系统</div>
+                <div class="nav-item" data-tab="settingsTab">
+                    <i class="fas fa-gear"></i> 设置
                 </div>
             </nav>
             <div class="sidebar-footer">
@@ -1870,6 +1942,116 @@
                     </div>
                 </div>
 
+                <!-- ====== Settings Tab ====== -->
+                <div id="settingsTab" class="tab-panel">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3><i class="fas fa-gear"></i> 系统设置</h3>
+                            <button class="btn btn-primary btn-sm" onclick="saveSettings()">
+                                <i class="fas fa-floppy-disk"></i> 保存设置
+                            </button>
+                        </div>
+
+                        <div class="settings-section">
+                            <h4><i class="fas fa-key" style="color:var(--primary);"></i> 大模型 API Key</h4>
+                            <p class="hint" style="margin-bottom:12px;">
+                                每个登录用户单独配置自己的公司 Key。AI 综合分析/多智能体报告优先使用 DeepSeek，未配置时使用 DashScope；AI 智能对话（LangGraph/Qwen）需要 DashScope Key。
+                            </p>
+                            <div class="settings-row">
+                                <div>
+                                    <strong>DeepSeek Key</strong>
+                                    <div class="hint">用于单智能体综合分析和多智能体报告，页面不回显明文。</div>
+                                </div>
+                                <div>
+                                    <div class="settings-inline">
+                                        <input type="password" class="form-input" id="deepseekKeyInput" placeholder="输入新的 DeepSeek API Key" autocomplete="off" style="max-width:360px;">
+                                        <span class="key-status" id="deepseekKeyStatus">未配置</span>
+                                        <button class="btn btn-outline btn-sm" onclick="deleteApiKey('deepseek')">
+                                            <i class="fas fa-trash"></i> 删除
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="settings-row">
+                                <div>
+                                    <strong>DashScope Key</strong>
+                                    <div class="hint">用于百炼/Qwen；多智能体可回退使用，LangGraph 智能对话必须配置。</div>
+                                </div>
+                                <div>
+                                    <div class="settings-inline">
+                                        <input type="password" class="form-input" id="dashscopeKeyInput" placeholder="输入新的 DashScope API Key" autocomplete="off" style="max-width:360px;">
+                                        <span class="key-status" id="dashscopeKeyStatus">未配置</span>
+                                        <button class="btn btn-outline btn-sm" onclick="deleteApiKey('dashscope')">
+                                            <i class="fas fa-trash"></i> 删除
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            <p class="hint" style="margin-top:8px;">保存后密钥仅存于后端本地用户设置文件，页面只显示掩码。请勿在截图、论文材料或 Git 提交中展示真实 Key。</p>
+                        </div>
+
+                        <div class="settings-section">
+                            <h4><i class="fas fa-display" style="color:var(--primary);"></i> 显示偏好</h4>
+                            <div class="settings-row">
+                                <div>
+                                    <strong>主题</strong>
+                                    <div class="hint">切换浅色或深色界面。</div>
+                                </div>
+                                <select class="form-select" id="themeSelect" onchange="previewSettings()">
+                                    <option value="light">浅色</option>
+                                    <option value="dark">深色</option>
+                                </select>
+                            </div>
+                            <div class="settings-row">
+                                <div>
+                                    <strong>亮度</strong>
+                                    <div class="hint">用于适配不同屏幕和光线环境。</div>
+                                </div>
+                                <div class="settings-inline">
+                                    <input type="range" id="brightnessRange" min="70" max="120" step="5" value="100" oninput="previewSettings()">
+                                    <span class="key-status" id="brightnessValue">100%</span>
+                                </div>
+                            </div>
+                            <div class="settings-row">
+                                <div>
+                                    <strong>字体大小</strong>
+                                    <div class="hint">调整页面整体文字尺度。</div>
+                                </div>
+                                <select class="form-select" id="fontSizeSelect" onchange="previewSettings()">
+                                    <option value="small">小</option>
+                                    <option value="normal">默认</option>
+                                    <option value="large">大</option>
+                                </select>
+                            </div>
+                            <div class="settings-row">
+                                <div>
+                                    <strong>字体风格</strong>
+                                    <div class="hint">选择系统默认、无衬线、衬线或等宽字体。</div>
+                                </div>
+                                <select class="form-select" id="fontFamilySelect" onchange="previewSettings()">
+                                    <option value="system">系统默认</option>
+                                    <option value="sans">无衬线</option>
+                                    <option value="serif">衬线</option>
+                                    <option value="mono">等宽</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="settings-section">
+                            <h4><i class="fas fa-shield-halved" style="color:var(--primary);"></i> 数据与隐私</h4>
+                            <div class="settings-row">
+                                <div>
+                                    <strong>本地显示设置</strong>
+                                    <div class="hint">清除浏览器中的主题、亮度和字体偏好。</div>
+                                </div>
+                                <button class="btn btn-outline btn-sm" onclick="resetDisplaySettings()">
+                                    <i class="fas fa-rotate-left"></i> 恢复默认
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
             </div>
             <div style="padding:16px 32px; text-align:center; font-size:.8rem; color:var(--text-muted); border-top:1px solid var(--border);">
                 EmoCare v5.0 · 基于深度学习的情感识别 · 提供心理健康支持 ·
@@ -1968,10 +2150,145 @@
         'happy':'快乐', 'sad':'悲伤', 'anger':'愤怒', 'neutral':'平静'
     };
 
+    const defaultDisplaySettings = {
+        theme: 'light',
+        brightness: 100,
+        font_size: 'normal',
+        font_family: 'system'
+    };
+
+    function getLocalDisplaySettings() {
+        try {
+            return {...defaultDisplaySettings, ...(JSON.parse(localStorage.getItem('displaySettings') || '{}'))};
+        } catch (_) {
+            return {...defaultDisplaySettings};
+        }
+    }
+
+    function fontScaleFor(size) {
+        return size === 'small' ? 0.92 : size === 'large' ? 1.1 : 1;
+    }
+
+    function fontFamilyFor(family) {
+        if (family === 'serif') return "'Times New Roman', 'SimSun', serif";
+        if (family === 'mono') return "'Cascadia Mono', Consolas, 'Courier New', monospace";
+        if (family === 'sans') return "'Inter', 'Microsoft YaHei', Arial, sans-serif";
+        return "'Inter', 'SF Pro Display', -apple-system, 'Microsoft YaHei', sans-serif";
+    }
+
+    function applyDisplaySettings(display) {
+        const settings = {...defaultDisplaySettings, ...(display || {})};
+        document.body.classList.toggle('theme-dark', settings.theme === 'dark');
+        document.documentElement.style.setProperty('--app-brightness', String((Number(settings.brightness) || 100) / 100));
+        document.documentElement.style.setProperty('--app-font-scale', String(fontScaleFor(settings.font_size)));
+        document.documentElement.style.setProperty('--app-font-family', fontFamilyFor(settings.font_family));
+        localStorage.setItem('displaySettings', JSON.stringify(settings));
+
+        const themeSelect = document.getElementById('themeSelect');
+        const brightnessRange = document.getElementById('brightnessRange');
+        const brightnessValue = document.getElementById('brightnessValue');
+        const fontSizeSelect = document.getElementById('fontSizeSelect');
+        const fontFamilySelect = document.getElementById('fontFamilySelect');
+        if (themeSelect) themeSelect.value = settings.theme;
+        if (brightnessRange) brightnessRange.value = settings.brightness;
+        if (brightnessValue) brightnessValue.textContent = `${settings.brightness}%`;
+        if (fontSizeSelect) fontSizeSelect.value = settings.font_size;
+        if (fontFamilySelect) fontFamilySelect.value = settings.font_family;
+    }
+
+    function collectDisplaySettings() {
+        return {
+            theme: document.getElementById('themeSelect')?.value || 'light',
+            brightness: Number(document.getElementById('brightnessRange')?.value || 100),
+            font_size: document.getElementById('fontSizeSelect')?.value || 'normal',
+            font_family: document.getElementById('fontFamilySelect')?.value || 'system'
+        };
+    }
+
+    function previewSettings() {
+        applyDisplaySettings(collectDisplaySettings());
+    }
+
+    function updateApiKeyStatus(settings) {
+        const keys = settings?.api_keys || {};
+        const deepseek = keys.deepseek || {};
+        const dashscope = keys.dashscope || {};
+        const deepseekEl = document.getElementById('deepseekKeyStatus');
+        const dashscopeEl = document.getElementById('dashscopeKeyStatus');
+        if (deepseekEl) deepseekEl.textContent = deepseek.configured ? `已配置 ${deepseek.masked || ''}` : '未配置';
+        if (dashscopeEl) dashscopeEl.textContent = dashscope.configured ? `已配置 ${dashscope.masked || ''}` : '未配置';
+    }
+
+    async function loadSettings() {
+        applyDisplaySettings(getLocalDisplaySettings());
+        if (!isLoggedIn) return;
+        try {
+            const res = await fetch(`${API_BASE_URL}/settings/${currentUserId}`);
+            const result = await res.json();
+            if (result.success && result.settings) {
+                updateApiKeyStatus(result.settings);
+                applyDisplaySettings(result.settings.display || getLocalDisplaySettings());
+            }
+        } catch (error) {
+            console.warn('加载设置失败', error);
+        }
+    }
+
+    async function saveSettings() {
+        if (!isLoggedIn) {
+            showStatus('请先登录', 'error');
+            return;
+        }
+        const deepseek = document.getElementById('deepseekKeyInput')?.value.trim() || '';
+        const dashscope = document.getElementById('dashscopeKeyInput')?.value.trim() || '';
+        const payload = {
+            api_keys: {deepseek, dashscope},
+            display: collectDisplaySettings()
+        };
+        try {
+            const res = await fetch(`${API_BASE_URL}/settings/${currentUserId}`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(payload)
+            });
+            const result = await res.json();
+            if (!result.success) throw new Error(result.error || '保存失败');
+            document.getElementById('deepseekKeyInput').value = '';
+            document.getElementById('dashscopeKeyInput').value = '';
+            updateApiKeyStatus(result.settings);
+            applyDisplaySettings(result.settings.display);
+            showStatus('设置已保存', 'success');
+        } catch (error) {
+            showStatus(`保存设置失败: ${error.message}`, 'error');
+        }
+    }
+
+    async function deleteApiKey(provider) {
+        if (!isLoggedIn) {
+            showStatus('请先登录', 'error');
+            return;
+        }
+        try {
+            const res = await fetch(`${API_BASE_URL}/settings/${currentUserId}/api_key/${provider}`, {method: 'DELETE'});
+            const result = await res.json();
+            if (!result.success) throw new Error(result.error || '删除失败');
+            updateApiKeyStatus(result.settings);
+            showStatus('API Key 已删除', 'success');
+        } catch (error) {
+            showStatus(`删除失败: ${error.message}`, 'error');
+        }
+    }
+
+    function resetDisplaySettings() {
+        applyDisplaySettings(defaultDisplaySettings);
+        showStatus('显示设置已恢复默认', 'success');
+    }
+
     // ============ Page Navigation ============
     const pageTitles = {
         uploadTab:'图像上传', emotionTab:'情绪分析', adviceTab:'健康建议',
-        monitorTab:'实时监测', monitorPhotosTab:'查看照片', aiAnalysisTab:'AI 大模型分析', chatTab:'AI 智能对话'
+        monitorTab:'实时监测', monitorPhotosTab:'查看照片', aiAnalysisTab:'AI 大模型分析', chatTab:'AI 智能对话',
+        settingsTab:'系统设置'
     };
 
     document.querySelectorAll('.nav-item[data-tab]').forEach(item => {
@@ -1983,6 +2300,7 @@
             document.getElementById(tabId).classList.add('active');
             document.getElementById('pageTitle').textContent = pageTitles[tabId] || '';
             if (tabId === 'monitorPhotosTab') loadMonitorCaptures();
+            if (tabId === 'settingsTab') loadSettings();
         });
     });
 
@@ -1994,10 +2312,12 @@
         document.getElementById(tabId).classList.add('active');
         document.getElementById('pageTitle').textContent = pageTitles[tabId] || '';
         if (tabId === 'monitorPhotosTab') loadMonitorCaptures();
+        if (tabId === 'settingsTab') loadSettings();
     }
 
     // ============ Init ============
     document.addEventListener('DOMContentLoaded', function() {
+        applyDisplaySettings(getLocalDisplaySettings());
         document.getElementById('previewContainer').style.display = 'none';
         document.getElementById('fileInfo').style.display = 'none';
         checkLoginStatus();
@@ -3050,6 +3370,7 @@
         document.getElementById('userAvatarChar').textContent = (currentUsername||'U')[0].toUpperCase();
         checkConnection();
         loadSessions();
+        loadSettings();
     }
 
     async function handleWelcomeLogin() {
@@ -3060,7 +3381,7 @@
             currentUserId=1; currentUsername=username; isLoggedIn=true;
             localStorage.setItem('currentUserId','1'); localStorage.setItem('currentUsername',username);
             localStorage.setItem('monitorScopeSessionId', newMonitorScopeSessionId());
-            showMainApp(); showStatus('登录成功','success'); return;
+            showMainApp(); showStatus('登录成功','success'); loadSettings(); return;
         }
         try {
             const res = await fetch(`${API_BASE_URL}/auth/login`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({username,password})});
@@ -3070,7 +3391,7 @@
                 currentUsername=username; isLoggedIn=true;
                 localStorage.setItem('currentUserId',String(currentUserId)); localStorage.setItem('currentUsername',currentUsername);
                 localStorage.setItem('monitorScopeSessionId', newMonitorScopeSessionId());
-                showMainApp(); showStatus('登录成功','success');
+                showMainApp(); showStatus('登录成功','success'); loadSettings();
             } else showStatus(result.error||'登录失败','error');
         } catch(e) { showStatus('登录失败，检查网络连接','error'); }
     }
@@ -3115,6 +3436,7 @@
         currentUserId=1; currentUsername=''; isLoggedIn=false;
         localStorage.removeItem('currentUserId'); localStorage.removeItem('currentUsername');
         localStorage.removeItem('monitorScopeSessionId');
+        applyDisplaySettings(defaultDisplaySettings);
         showWelcomePage(); showStatus('已退出','success');
         currentSessionId=null;
     }

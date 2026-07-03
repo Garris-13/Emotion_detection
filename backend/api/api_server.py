@@ -78,13 +78,11 @@ import time
 import numpy as np
 try:
     from multiAgent.MultiAgentFlow import run_flow_from_data
-    from multiAgent.key_loader import get_api_key
 
     MULTI_AGENT_AVAILABLE = True
     print("✅ MultiAgent 模块可用")
 except Exception as e:
     MULTI_AGENT_AVAILABLE = False
-    get_api_key = None
     print(f"⚠️  MultiAgent 模块不可用: {e}")
 # MediaPipe 导入可能有 NumPy 兼容性问题，安全导入
 MEDIAPIPE_AVAILABLE = False
@@ -105,11 +103,12 @@ DATABASE_AVAILABLE = False
 try:
     from dotenv import load_dotenv
     load_dotenv(os.path.join(PROJECT_ROOT, '.env'), override=True)
-    from langgraph_agent import get_langgraph_agent
+    from langgraph_agent import LangGraphEmotionAgent
     LANGGRAPH_AVAILABLE = True
     print("✅ LangGraph Agent 模块可用")
 except Exception as e:
     LANGGRAPH_AVAILABLE = False
+    LangGraphEmotionAgent = None
     print(f"⚠️ LangGraph Agent 模块导入失败: {e}")
     import traceback
     traceback.print_exc()
@@ -187,18 +186,12 @@ except ImportError as e:
     print(f"⚠️  OpenAI SDK 不可用: {e}")
     print("请安装: pip install openai")
 
-# ================ 环境变量检查 ================
+# ================ 大模型配置说明 ================
 print("\n" + "=" * 70)
-print("🔑 环境变量检查")
+print("🔑 大模型配置")
 print("=" * 70)
-
-# 检查阿里云百炼API Key
-dashscope_api_key = os.getenv("DASHSCOPE_API_KEY")
-if dashscope_api_key:
-    print(f"✅ 阿里云百炼API Key已设置: {dashscope_api_key[:10]}...")
-else:
-    print("⚠️  未设置DASHSCOPE_API_KEY环境变量")
-    print("   需在环境变量中配置 DASHSCOPE_API_KEY 才能使用大模型功能")
+print("ℹ️  Web 端大模型功能使用登录用户在系统设置中保存的 API Key。")
+print("ℹ️  命令行脚本仍可通过 DEEPSEEK_API_KEY / DASHSCOPE_API_KEY 环境变量调试。")
 
 # ================ 初始化Flask应用 ================
 app = Flask(__name__)
@@ -228,6 +221,107 @@ EMOTION_ZH = {
 # 创建综合结果目录
 COMPREHENSIVE_RESULT_DIR = os.path.join(PROJECT_ROOT, "data", "comprehensive_results")
 os.makedirs(COMPREHENSIVE_RESULT_DIR, exist_ok=True)
+USER_SETTINGS_PATH = os.path.join(PROJECT_ROOT, "data", "user_settings.json")
+
+
+def _settings_user_key(user_id):
+    try:
+        return str(int(user_id))
+    except Exception:
+        return "1"
+
+
+def _mask_api_key(value):
+    if not value:
+        return ""
+    value = str(value)
+    if len(value) <= 8:
+        return "*" * len(value)
+    return f"{value[:4]}{'*' * max(4, len(value) - 8)}{value[-4:]}"
+
+
+def _load_user_settings_store():
+    try:
+        if os.path.exists(USER_SETTINGS_PATH):
+            with open(USER_SETTINGS_PATH, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                return data if isinstance(data, dict) else {}
+    except Exception as e:
+        print(f"⚠️ 读取用户设置失败: {e}")
+    return {}
+
+
+def _save_user_settings_store(data):
+    os.makedirs(os.path.dirname(USER_SETTINGS_PATH), exist_ok=True)
+    with open(USER_SETTINGS_PATH, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+
+def _get_user_settings(user_id):
+    store = _load_user_settings_store()
+    return store.get(_settings_user_key(user_id), {})
+
+
+def _get_user_api_key(user_id, provider):
+    settings = _get_user_settings(user_id)
+    keys = settings.get("api_keys", {}) if isinstance(settings, dict) else {}
+    if provider == "deepseek":
+        return keys.get("deepseek") or ""
+    if provider == "dashscope":
+        return keys.get("dashscope") or ""
+    return ""
+
+
+def _get_user_llm_keys(user_id):
+    """读取当前登录用户的大模型 Key；Web 调用不再回退到仓库级密钥文件。"""
+    if user_id is None:
+        return "", ""
+    return _get_user_api_key(user_id, "deepseek"), _get_user_api_key(user_id, "dashscope")
+
+
+def _require_user_llm_keys(user_id, *, dashscope_only=False):
+    deepseek_key, dashscope_key = _get_user_llm_keys(user_id)
+    if dashscope_only:
+        if not dashscope_key:
+            raise ValueError("当前功能需要 DashScope API Key，请登录后在「系统设置」中配置。")
+        return "", dashscope_key
+    if not deepseek_key and not dashscope_key:
+        raise ValueError("未找到当前用户的大模型 API Key，请登录后在「系统设置」中配置 DeepSeek 或 DashScope Key。")
+    return deepseek_key, dashscope_key
+
+
+def _public_user_settings(user_id):
+    settings = _get_user_settings(user_id)
+    api_keys = settings.get("api_keys", {}) if isinstance(settings, dict) else {}
+    display = settings.get("display", {}) if isinstance(settings, dict) else {}
+    return {
+        "user_id": int(_settings_user_key(user_id)),
+        "api_keys": {
+            "deepseek": {
+                "configured": bool(api_keys.get("deepseek")),
+                "masked": _mask_api_key(api_keys.get("deepseek")),
+            },
+            "dashscope": {
+                "configured": bool(api_keys.get("dashscope")),
+                "masked": _mask_api_key(api_keys.get("dashscope")),
+            },
+        },
+        "display": {
+            "theme": display.get("theme", "light"),
+            "brightness": float(display.get("brightness", 100)),
+            "font_size": display.get("font_size", "normal"),
+            "font_family": display.get("font_family", "system"),
+        },
+    }
+
+
+def _get_langgraph_agent_for_user(user_id):
+    """LangGraph 对话使用当前登录用户的 DashScope Key。"""
+    if user_id is not None and LangGraphEmotionAgent is not None:
+        dashscope_key = _get_user_api_key(user_id, "dashscope")
+        if dashscope_key:
+            return LangGraphEmotionAgent(api_key=dashscope_key)
+    return None
 
 
 # ================ 初始化函数 ================
@@ -536,7 +630,7 @@ def home():
         'health_advisor_loaded': health_advisor is not None,
         'llm_available': OPENAI_AVAILABLE,
         'database_available': DATABASE_AVAILABLE and db_manager is not None,
-        'langgraph_available': LANGGRAPH_AVAILABLE and langgraph_agent is not None,
+        'langgraph_available': LANGGRAPH_AVAILABLE,
         'device': str(device) if device else 'unknown'
     })
 
@@ -838,12 +932,15 @@ def comprehensive_analysis():
         use_history = data.get('use_history', True)
         analysis_type = data.get('analysis_type', 'health_advice')
         days = data.get('days', 7)
+        user_id = data.get('user_id')
         user_context = data.get('user_context') or {
             "age_group": "adult",
             "stress_level": "medium",
             "has_support_system": True,
             "is_first_time": False
         }
+        if user_id is not None and isinstance(user_context, dict):
+            user_context["user_id"] = user_id
 
         # 读取历史数据
         history_data = []
@@ -955,12 +1052,15 @@ def multi_agent_analysis():
 
         data = request.get_json() or {}
         days = data.get('days', 7)
+        user_id = data.get('user_id')
         user_context = data.get('user_context') or {
             "age_group": "adult",
             "stress_level": "medium",
             "has_support_system": True,
             "is_first_time": False
         }
+        if user_id is not None and isinstance(user_context, dict):
+            user_context["user_id"] = user_id
 
         # 尝试多个可能的目录
         possible_dirs = [
@@ -999,6 +1099,7 @@ def multi_agent_analysis():
         if not history_data:
             history_data = generate_sample_data(10)
 
+        deepseek_key, dashscope_key = _require_user_llm_keys(user_id)
         output_filename = f"multi_agent_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
         output_path = os.path.join(COMPREHENSIVE_RESULT_DIR, output_filename)
 
@@ -1006,6 +1107,8 @@ def multi_agent_analysis():
             history_data=history_data,
             user_context=user_context,
             output_path=output_path,
+            deepseek_key=deepseek_key,
+            dashscope_key=dashscope_key,
         )
 
         return jsonify({
@@ -1023,7 +1126,7 @@ def multi_agent_analysis():
         status_code = 500
         if 'API Key' in error_msg or 'DEEPSEEK_API_KEY' in error_msg or 'DASHSCOPE_API_KEY' in error_msg:
             status_code = 400
-            error_msg = f"{error_msg} 请先配置环境变量后重启后端服务。"
+            error_msg = f"{error_msg} 请登录后进入系统设置保存自己的公司 API Key。"
         return jsonify({
             'success': False,
             'error': error_msg,
@@ -1102,19 +1205,9 @@ def _read_history_data(days, user_id=None, monitor_scope_id=None):
     return history_data
 
 
-def _get_llm_client_and_info():
+def _get_llm_client_and_info(user_id=None):
     """获取 LLM 客户端、模型名与提供者名（供 SSE 复用）"""
-    deepseek_key = None
-    dashscope_key = None
-    if get_api_key:
-        deepseek_key = get_api_key("deepseek")
-        dashscope_key = get_api_key("dashscope")
-    if not deepseek_key:
-        deepseek_key = os.getenv("DEEPSEEK_API_KEY")
-    if not dashscope_key:
-        dashscope_key = os.getenv("DASHSCOPE_API_KEY")
-    if not deepseek_key and not dashscope_key:
-        raise ValueError("未找到可用 API Key")
+    deepseek_key, dashscope_key = _require_user_llm_keys(user_id)
     if deepseek_key:
         return OpenAI(api_key=deepseek_key, base_url="https://api.deepseek.com"), "deepseek-chat", "DeepSeek"
     return OpenAI(api_key=dashscope_key, base_url="https://dashscope.aliyuncs.com/compatible-mode/v1"), "qwen-plus", "DashScope"
@@ -1155,7 +1248,8 @@ def comprehensive_analysis_stream():
                 yield "data: [DONE]\n\n"
                 return
 
-            client, model_name, provider_name = _get_llm_client_and_info()
+            stream_user_id = request.args.get('user_id', type=int)
+            client, model_name, provider_name = _get_llm_client_and_info(stream_user_id)
             prompt = build_llm_prompt(analysis_result, analysis_type, user_context)
             messages = [
                 {"role": "system", "content": build_system_prompt(analysis_type, user_context)},
@@ -1271,6 +1365,16 @@ def multi_agent_analysis_stream():
 
             user_context_fmt = format_user_context(user_context)
             generated_at = datetime.now().strftime("%Y年%m月%d日 %H:%M:%S")
+            user_deepseek_key = _get_user_api_key(stream_user_id, "deepseek") if stream_user_id is not None else None
+            user_dashscope_key = _get_user_api_key(stream_user_id, "dashscope") if stream_user_id is not None else None
+            if not user_deepseek_key and not user_dashscope_key:
+                yield f"data: {json.dumps({'type': 'error', 'error': '未找到当前用户的大模型 API Key，请先在系统设置中配置 DeepSeek 或 DashScope Key。'}, ensure_ascii=False)}\n\n"
+                yield "data: [DONE]\n\n"
+                return
+            agent_key_kwargs = {
+                "deepseek_key": user_deepseek_key,
+                "dashscope_key": user_dashscope_key,
+            }
 
             meta = json.dumps({"type": "meta", "total_samples": total_samples, "user_context": user_context_fmt}, ensure_ascii=False)
             yield f"data: {meta}\n\n"
@@ -1281,7 +1385,7 @@ def multi_agent_analysis_stream():
                 f"```json\n{json.dumps(history_data, ensure_ascii=False, indent=2)}\n```"
             )
             yield f"data: {json.dumps({'type': 'agent_start', 'step': 1, 'name': '数据分析师', 'icon': '🔍'}, ensure_ascii=False)}\n\n"
-            analyst_agent = make_agent("数据分析师", ANALYST_SYSTEM_PROMPT, temperature=0.3)
+            analyst_agent = make_agent("数据分析师", ANALYST_SYSTEM_PROMPT, temperature=0.3, **agent_key_kwargs)
             analyst_agent.create_conversation()
             analyst_agent.add_user_message(analyst_input)
             analyst_output = ""
@@ -1299,7 +1403,7 @@ def multi_agent_analysis_stream():
             # Step 2: 心理评估师
             psychologist_input = f"## 数据分析结论\n\n{analyst_output}\n\n---\n\n## 用户画像\n\n{user_context_fmt}"
             yield f"data: {json.dumps({'type': 'agent_start', 'step': 2, 'name': '心理评估师', 'icon': '💬'}, ensure_ascii=False)}\n\n"
-            psych_agent = make_agent("心理评估师", PSYCHOLOGIST_SYSTEM_PROMPT, temperature=0.7, max_tokens=600)
+            psych_agent = make_agent("心理评估师", PSYCHOLOGIST_SYSTEM_PROMPT, temperature=0.7, max_tokens=600, **agent_key_kwargs)
             psych_agent.create_conversation()
             psych_agent.add_user_message(psychologist_input)
             psychologist_output = ""
@@ -1317,7 +1421,7 @@ def multi_agent_analysis_stream():
             # Step 3: 行动规划师
             planner_input = f"## 心理评估结果\n\n{psychologist_output}\n\n---\n\n## 用户画像\n\n{user_context_fmt}"
             yield f"data: {json.dumps({'type': 'agent_start', 'step': 3, 'name': '行动规划师', 'icon': '🎯'}, ensure_ascii=False)}\n\n"
-            planner_agent = make_agent("行动规划师", PLANNER_SYSTEM_PROMPT, temperature=0.5)
+            planner_agent = make_agent("行动规划师", PLANNER_SYSTEM_PROMPT, temperature=0.5, **agent_key_kwargs)
             planner_agent.create_conversation()
             planner_agent.add_user_message(planner_input)
             planner_output = ""
@@ -1341,7 +1445,7 @@ def multi_agent_analysis_stream():
                 f"### 行动规划师输出\n\n{planner_output}"
             )
             yield f"data: {json.dumps({'type': 'agent_start', 'step': 4, 'name': '报告主编', 'icon': '📝'}, ensure_ascii=False)}\n\n"
-            editor_agent = make_agent("报告主编", EDITOR_SYSTEM_PROMPT, temperature=0.5, max_tokens=3000)
+            editor_agent = make_agent("报告主编", EDITOR_SYSTEM_PROMPT, temperature=0.5, max_tokens=3000, **agent_key_kwargs)
             editor_agent.create_conversation()
             editor_agent.add_user_message(editor_input)
             final_report = ""
@@ -1852,20 +1956,10 @@ def call_aliyun_llm(analysis_result, analysis_type, user_context=None):
         if not OPENAI_AVAILABLE:
             raise ImportError("OpenAI SDK 未安装，无法调用大模型")
 
-        # 读取 API Key（支持环境变量和 API_Key.json）
-        deepseek_key = None
-        dashscope_key = None
-        if get_api_key:
-            deepseek_key = get_api_key("deepseek")
-            dashscope_key = get_api_key("dashscope")
-
-        if not deepseek_key:
-            deepseek_key = os.getenv("DEEPSEEK_API_KEY")
-        if not dashscope_key:
-            dashscope_key = os.getenv("DASHSCOPE_API_KEY")
-
-        if not deepseek_key and not dashscope_key:
-            raise ValueError("未找到可用 API Key，请配置 DEEPSEEK_API_KEY 或 DASHSCOPE_API_KEY（环境变量或 API_Key.json）")
+        user_id = None
+        if isinstance(user_context, dict):
+            user_id = user_context.get("user_id")
+        deepseek_key, dashscope_key = _require_user_llm_keys(user_id)
 
         # 优先 DeepSeek，回退百炼
         if deepseek_key:
@@ -2867,7 +2961,7 @@ def langgraph_chat():
     }
     """
     try:
-        if not LANGGRAPH_AVAILABLE or langgraph_agent is None:
+        if not LANGGRAPH_AVAILABLE:
             return jsonify({
                 'success': False,
                 'error': 'LangGraph Agent 不可用',
@@ -2893,8 +2987,15 @@ def langgraph_chat():
                 'timestamp': datetime.now().isoformat()
             }), 400
 
-        # 与 LangGraph Agent 对话
-        result = langgraph_agent.chat(user_message, user_id, session_id)
+        # 与 LangGraph Agent 对话；用户设置中存在 DashScope Key 时优先使用个人 Key。
+        active_agent = _get_langgraph_agent_for_user(user_id)
+        if active_agent is None:
+            return jsonify({
+                'success': False,
+                'error': 'LangGraph 对话需要当前用户的 DashScope API Key，请先在系统设置中配置。',
+                'timestamp': datetime.now().isoformat()
+            }), 503
+        result = active_agent.chat(user_message, user_id, session_id)
 
         return jsonify(result)
 
@@ -2921,7 +3022,7 @@ def langgraph_chat_stream():
     }
     """
     try:
-        if not LANGGRAPH_AVAILABLE or langgraph_agent is None:
+        if not LANGGRAPH_AVAILABLE:
             return jsonify({
                 'success': False,
                 'error': 'LangGraph Agent 不可用',
@@ -2949,7 +3050,12 @@ def langgraph_chat_stream():
 
         def generate():
             try:
-                for token_data in langgraph_agent.chat_stream(user_message, user_id, session_id):
+                active_agent = _get_langgraph_agent_for_user(user_id)
+                if active_agent is None:
+                    yield f"data: {json.dumps({'type': 'error', 'error': 'LangGraph 对话需要当前用户的 DashScope API Key，请先在系统设置中配置。'}, ensure_ascii=False)}\n\n"
+                    yield "data: [DONE]\n\n"
+                    return
+                for token_data in active_agent.chat_stream(user_message, user_id, session_id):
                     yield f"data: {json.dumps(token_data, ensure_ascii=False)}\n\n"
                 yield "data: [DONE]\n\n"
             except Exception as e:
@@ -2976,9 +3082,11 @@ def langgraph_chat_stream():
 @app.route('/langgraph/status', methods=['GET'])
 def langgraph_status():
     """获取 LangGraph Agent 状态"""
+    user_id = request.args.get('user_id', type=int)
     return jsonify({
         'success': True,
-        'available': LANGGRAPH_AVAILABLE and langgraph_agent is not None,
+        'available': LANGGRAPH_AVAILABLE,
+        'dashscope_key_configured': bool(_get_user_api_key(user_id, "dashscope")) if user_id is not None else False,
         'database_available': DATABASE_AVAILABLE and db_manager is not None,
         'timestamp': datetime.now().isoformat()
     })
@@ -3042,6 +3150,94 @@ def database_status():
         'available': DATABASE_AVAILABLE,
         'timestamp': datetime.now().isoformat()
     })
+
+
+# ================ 用户设置 API 端点 ================
+@app.route('/settings/<int:user_id>', methods=['GET'])
+def get_user_settings_api(user_id):
+    """获取用户设置。API Key 仅返回掩码，不返回明文。"""
+    try:
+        return jsonify({
+            'success': True,
+            'settings': _public_user_settings(user_id),
+            'timestamp': datetime.now().isoformat()
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e), 'timestamp': datetime.now().isoformat()}), 500
+
+
+@app.route('/settings/<int:user_id>', methods=['POST'])
+def save_user_settings_api(user_id):
+    """保存用户设置。空字符串不会覆盖已有 API Key。"""
+    try:
+        if not request.is_json:
+            return jsonify({'success': False, 'error': '请求必须是 JSON 格式'}), 400
+
+        data = request.get_json() or {}
+        store = _load_user_settings_store()
+        key = _settings_user_key(user_id)
+        settings = store.get(key, {})
+        api_keys = settings.get('api_keys', {}) if isinstance(settings, dict) else {}
+        display = settings.get('display', {}) if isinstance(settings, dict) else {}
+
+        incoming_keys = data.get('api_keys') or {}
+        if isinstance(incoming_keys, dict):
+            for provider in ('deepseek', 'dashscope'):
+                value = incoming_keys.get(provider)
+                if isinstance(value, str) and value.strip():
+                    api_keys[provider] = value.strip()
+
+        incoming_display = data.get('display') or {}
+        if isinstance(incoming_display, dict):
+            if incoming_display.get('theme') in ('light', 'dark'):
+                display['theme'] = incoming_display.get('theme')
+            try:
+                brightness = float(incoming_display.get('brightness', display.get('brightness', 100)))
+                display['brightness'] = max(70, min(120, brightness))
+            except Exception:
+                pass
+            if incoming_display.get('font_size') in ('small', 'normal', 'large'):
+                display['font_size'] = incoming_display.get('font_size')
+            if incoming_display.get('font_family') in ('system', 'sans', 'serif', 'mono'):
+                display['font_family'] = incoming_display.get('font_family')
+
+        settings['api_keys'] = api_keys
+        settings['display'] = display
+        settings['updated_at'] = datetime.now().isoformat()
+        store[key] = settings
+        _save_user_settings_store(store)
+        return jsonify({
+            'success': True,
+            'settings': _public_user_settings(user_id),
+            'timestamp': datetime.now().isoformat()
+        })
+    except Exception as e:
+        print(f"❌ 保存用户设置失败: {e}")
+        return jsonify({'success': False, 'error': str(e), 'timestamp': datetime.now().isoformat()}), 500
+
+
+@app.route('/settings/<int:user_id>/api_key/<provider>', methods=['DELETE'])
+def delete_user_api_key_api(user_id, provider):
+    """删除指定用户的大模型 API Key。"""
+    if provider not in ('deepseek', 'dashscope'):
+        return jsonify({'success': False, 'error': '不支持的 provider'}), 400
+    try:
+        store = _load_user_settings_store()
+        key = _settings_user_key(user_id)
+        settings = store.get(key, {})
+        api_keys = settings.get('api_keys', {}) if isinstance(settings, dict) else {}
+        api_keys.pop(provider, None)
+        settings['api_keys'] = api_keys
+        settings['updated_at'] = datetime.now().isoformat()
+        store[key] = settings
+        _save_user_settings_store(store)
+        return jsonify({
+            'success': True,
+            'settings': _public_user_settings(user_id),
+            'timestamp': datetime.now().isoformat()
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e), 'timestamp': datetime.now().isoformat()}), 500
 
 
 # ================ 用户认证 API 端点 ================
@@ -3484,12 +3680,8 @@ if __name__ == '__main__':
     # 初始化 LangGraph Agent
     langgraph_agent_initialized = False
     if LANGGRAPH_AVAILABLE:
-        try:
-            langgraph_agent = get_langgraph_agent()
-            langgraph_agent_initialized = True
-            print("✅ LangGraph Agent 初始化成功")
-        except Exception as e:
-            print(f"❌ LangGraph Agent 初始化失败: {e}")
+        langgraph_agent_initialized = True
+        print("✅ LangGraph Agent 模块已就绪，登录用户配置 DashScope Key 后可使用")
 
     print("\n" + "=" * 70)
     print("✅ 初始化完成")
@@ -3501,7 +3693,7 @@ if __name__ == '__main__':
     print(f"  摄像头监测器: {'✅ 已加载' if camera_initialized else '❌ 未加载'}")
     print(f"  阿里云大模型: {'✅ 可用' if OPENAI_AVAILABLE else '❌ 不可用'}")
     print(f"  数据库: {'✅ 已加载' if db_initialized else '❌ 未加载'}")
-    print(f"  LangGraph Agent: {'✅ 已加载' if langgraph_agent_initialized else '❌ 未加载'}")
+    print(f"  LangGraph Agent: {'✅ 模块可用' if langgraph_agent_initialized else '❌ 未加载'}")
 
     print("\n" + "=" * 70)
     print("🌐 API 服务器启动中...")
@@ -3521,7 +3713,7 @@ if __name__ == '__main__':
         f"  curl -X POST http://0.0.0.0:7860/langgraph/chat -H 'Content-Type: application/json' -d '{{\"message\":\"你好\"}}'")
 
     print(f"\n⚠️  注意:")
-    print(f"  阿里云大模型API Key: {'已设置' if os.getenv('DASHSCOPE_API_KEY') else '未设置（需在环境变量中配置 DASHSCOPE_API_KEY）'}")
+    print(f"  Web 大模型 API Key: 登录后在系统设置中配置 DeepSeek / DashScope")
     print(f"  综合情绪分析端点: POST /comprehensive_analysis")
     print(f"  LangGraph Agent 端点: POST /langgraph/chat")
     print("=" * 70)
