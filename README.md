@@ -1,4 +1,4 @@
-# EmoCare 智能情绪识别与健康反馈系统
+﻿# EmoCare 智能情绪识别与健康反馈系统
 
 EmoCare 是一套面向连续情绪监测与心理健康辅助场景的软件系统。系统支持图片上传和摄像头实时采集，利用深度学习模型识别人脸表情，输出主要情绪类别、置信度和多类别情绪概率分布，并结合规则引擎、大语言模型和多智能体反馈流程生成健康建议、综合分析报告与对话式辅助回复。
 
@@ -22,33 +22,33 @@ EmoCare 是一套面向连续情绪监测与心理健康辅助场景的软件系
 
 ### 登录与注册
 
-![登录界面](soft_copyright/screenshots/01_login.png)
+![登录界面](docs/images/01_login.png)
 
-![注册界面](soft_copyright/screenshots/02_register.png)
+![注册界面](docs/images/02_register.png)
 
 ### 图片上传识别
 
-![情绪识别主界面](soft_copyright/screenshots/03_emotion_main.png)
+![情绪识别主界面](docs/images/03_emotion_main.png)
 
-![图片上传识别结果与情绪概率展示](soft_copyright/screenshots/04_upload_result.png)
+![图片上传识别结果与情绪概率展示](docs/images/04_upload_result.png)
 
 ### 实时摄像头监测
 
-![实时摄像头监测画面](soft_copyright/screenshots/05_camera_monitor.png)
+![实时摄像头监测画面](docs/images/05_camera_monitor.png)
 
-![监测历史记录画面](soft_copyright/screenshots/06_monitor_history.png)
+![监测历史记录画面](docs/images/06_monitor_history.png)
 
 ### 智能建议与综合分析
 
-![智能建议生成界面](soft_copyright/screenshots/07_advice.png)
+![智能建议生成界面](docs/images/07_advice.png)
 
-![综合分析报告页面](soft_copyright/screenshots/08_analysis_report.png)
+![综合分析报告页面](docs/images/08_analysis_report.png)
 
 ### 智能对话与系统设置
 
-![智能对话界面](soft_copyright/screenshots/09_chat.png)
+![智能对话界面](docs/images/09_chat.png)
 
-![系统设置界面](soft_copyright/screenshots/10_settings.png)
+![系统设置界面](docs/images/10_settings.png)
 
 ## 技术架构
 
